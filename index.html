@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>DeepSeek Chatbot</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github-dark.min.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/5.1.1/marked.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
+  <style>
+    body {
+      margin: 0;
+      font-family: "Segoe UI", sans-serif;
+      background: #121212;
+      color: #e0e0e0;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+    }
+
+    h2 {
+      margin: 0;
+      padding: 16px;
+      text-align: center;
+      background: #1e1e1e;
+      border-bottom: 1px solid #333;
+    }
+
+    #chat {
+      flex: 1;
+      overflow-y: auto;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .message {
+      max-width: 80%;
+      padding: 12px 16px;
+      border-radius: 16px;
+      margin: 8px 0;
+      line-height: 1.5;
+      white-space: pre-wrap;
+    }
+
+    .user {
+      align-self: flex-end;
+      background: #0059ff;
+      color: white;
+      border-bottom-right-radius: 4px;
+    }
+
+    .bot {
+      align-self: flex-start;
+      background: #2d2d2d;
+      border-bottom-left-radius: 4px;
+    }
+
+    pre {
+      position: relative;
+      background: #1e1e1e;
+      border-radius: 10px;
+      padding-top: 32px;
+      margin: 1em 0;
+      overflow: auto;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.5);
+    }
+
+    pre code {
+      font-family: Consolas, Monaco, monospace;
+      display: block;
+      padding: 16px;
+      color: #eee;
+    }
+
+    .code-header {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 32px;
+      background: #2b2b2b;
+      border-top-left-radius: 10px;
+      border-top-right-radius: 10px;
+      padding: 0 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      color: #aaa;
+      font-size: 13px;
+    }
+
+    .code-btns {
+      display: flex;
+      gap: 6px;
+    }
+
+    .code-btns button {
+      background: #444;
+      border: none;
+      color: white;
+      padding: 2px 8px;
+      border-radius: 6px;
+      font-size: 12px;
+      cursor: pointer;
+    }
+
+    #input-bar {
+      display: flex;
+      padding: 12px;
+      background: #1e1e1e;
+      border-top: 1px solid #333;
+    }
+
+    #userInput {
+      flex: 1;
+      font-size: 16px;
+      padding: 10px;
+      border-radius: 8px;
+      border: none;
+      outline: none;
+      background: #2a2a2a;
+      color: white;
+    }
+
+    #sendBtn {
+      padding: 10px 20px;
+      margin-left: 8px;
+      font-size: 16px;
+      background: #007bff;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <h2>💬 DeepSeek R1 – Coding Assistant</h2>
+  <div id="chat"></div>
+
+  <div id="input-bar">
+    <input id="userInput" type="text" placeholder="Ask something..." />
+    <button id="sendBtn" onclick="sendMessage()">Send</button>
+  </div>
+
+  <script>
+    const chatBox = document.getElementById("chat");
+    const input = document.getElementById("userInput");
+
+    const history = [
+      { role: "system", content: "You are a helpful programming assistant. Provide clean code with comments." }
+    ];
+
+    async function sendMessage() {
+      const userText = input.value.trim();
+      if (!userText) return;
+
+      appendMessage(userText, "user");
+      input.value = "";
+      history.push({ role: "user", content: userText });
+
+      const response = await fetch("https://deepseek-backend-2q64.onrender.com/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ messages: history })
+      });
+
+      let replyText = "";
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+
+      const botBubble = document.createElement("div");
+      botBubble.className = "message bot";
+      botBubble.innerHTML = "...";
+      chatBox.appendChild(botBubble);
+      chatBox.scrollTop = chatBox.scrollHeight;
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        const chunk = decoder.decode(value);
+        replyText += chunk;
+        botBubble.innerHTML = marked.parse(replyText);
+        hljs.highlightAll();
+        addCodeButtons();
+        chatBox.scrollTop = chatBox.scrollHeight;
+      }
+
+      history.push({ role: "assistant", content: replyText });
+    }
+
+    function appendMessage(text, sender) {
+      const div = document.createElement("div");
+      div.className = `message ${sender}`;
+      div.textContent = text;
+      chatBox.appendChild(div);
+      chatBox.scrollTop = chatBox.scrollHeight;
+    }
+
+    function addCodeButtons() {
+      document.querySelectorAll("pre code").forEach((block, i) => {
+        const pre = block.parentNode;
+        if (!pre.querySelector(".code-header")) {
+          const langClass = block.className || "";
+          const langMatch = langClass.match(/language-(\w+)/);
+          const lang = langMatch ? langMatch[1] : "text";
+          const extMap = { python: "py", javascript: "js", html: "html", css: "css", json: "json", cpp: "cpp", c: "c", java: "java", sh: "sh", ts: "ts" };
+          const fileExt = extMap[lang] || "txt";
+
+          const header = document.createElement("div");
+          header.className = "code-header";
+          header.innerHTML = `
+            <span>${lang.toUpperCase()}</span>
+            <div class="code-btns">
+              <button onclick="copyCode(this)">Copy</button>
+              <button onclick="downloadCode(this, '${fileExt}', ${i + 1})">Download</button>
+            </div>`;
+          pre.insertBefore(header, block);
+        }
+      });
+    }
+
+    function copyCode(btn) {
+      const code = btn.closest("pre").querySelector("code").innerText;
+      navigator.clipboard.writeText(code).then(() => {
+        btn.innerText = "Copied!";
+        setTimeout(() => btn.innerText = "Copy", 1500);
+      });
+    }
+
+    function downloadCode(btn, ext, index) {
+      const code = btn.closest("pre").querySelector("code").innerText;
+      const blob = new Blob([code], { type: "text/plain" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = `deepseek_code_${index}.${ext}`;
+      a.click();
+    }
+
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") sendMessage();
+    });
+  </script>
+</body>
+</html>
